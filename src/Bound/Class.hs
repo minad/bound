@@ -1,8 +1,4 @@
-{-# LANGUAGE CPP #-}
-#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 704
 {-# LANGUAGE DefaultSignatures #-}
-#endif
-{-# OPTIONS -fno-warn-deprecations #-}
 -----------------------------------------------------------------------------
 -- |
 -- Copyright   :  (C) 2012-2015 Edward Kmett
@@ -20,14 +16,9 @@ module Bound.Class
   , (=<<<)
   ) where
 
-#if __GLASGOW_HASKELL__ >= 704
 import Control.Monad.Trans.Class
-#endif
-#if __GLASGOW_HASKELL__ < 710
-import Data.Monoid
-#endif
 import Control.Monad.Trans.Cont
-import Control.Monad.Trans.Error
+import Control.Monad.Trans.Except
 import Control.Monad.Trans.Identity
 import Control.Monad.Trans.List
 import Control.Monad.Trans.Maybe
@@ -67,18 +58,15 @@ class Bound t where
   --
   -- @m '>>>=' f = m '>>=' 'lift' '.' f@
   (>>>=) :: Monad f => t f a -> (a -> f c) -> t f c
-#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 704
-  default (>>>=) :: (MonadTrans t, Monad f, Monad (t f)) =>
-                    t f a -> (a -> f c) -> t f c
+  default (>>>=) :: (MonadTrans t, Monad f, Monad (t f)) => t f a -> (a -> f c) -> t f c
   m >>>= f = m >>= lift . f
   {-# INLINE (>>>=) #-}
-#endif
 
 instance Bound (ContT c) where
   m >>>= f = m >>= lift . f
   {-# INLINE (>>>=) #-}
 
-instance Error e => Bound (ErrorT e) where
+instance Bound (ExceptT e) where
  m >>>= f = m >>= lift . f
  {-# INLINE (>>>=) #-}
 

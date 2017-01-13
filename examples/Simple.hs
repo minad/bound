@@ -1,21 +1,20 @@
-{-# LANGUAGE CPP, TemplateHaskell #-}
-module Main where
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE StandaloneDeriving #-}
+module Simple where
 
 -- this is a simple example where lambdas only bind a single variable at a time
 -- this directly corresponds to the usual de bruijn presentation
 
-import Data.List (elemIndex)
-import Data.Foldable hiding (notElem)
-import Data.Maybe (fromJust)
-import Data.Traversable
-import Control.Monad
-import Control.Applicative
-import Prelude hiding (foldr,abs)
-import Data.Deriving (deriveEq1, deriveOrd1, deriveRead1, deriveShow1)
-import Data.Functor.Classes
 import Bound
+import Control.Monad
+import Data.Deriving
+import Data.Foldable
+import Data.List (elemIndex)
+import Data.Maybe (fromJust)
 import System.Exit
-
 
 infixl 9 :@
 
@@ -24,6 +23,17 @@ data Exp a
   | Exp a :@ Exp a
   | Lam (Scope () Exp a)
   | Let [Scope Int Exp a] (Scope Int Exp a)
+  deriving (Functor,Foldable,Traversable)
+
+deriveEq1   ''Exp
+deriveOrd1  ''Exp
+deriveRead1 ''Exp
+deriveShow1 ''Exp
+
+deriving instance Eq a => Eq (Exp a)
+deriving instance Ord a => Ord (Exp a)
+deriving instance Show a => Show (Exp a)
+deriving instance Read a => Read (Exp a)
 
 -- | A smart constructor for Lam
 --
@@ -39,35 +49,15 @@ let_ [] b = b
 let_ bs b = Let (map (abstr . snd) bs) (abstr b)
   where abstr = abstract (`elemIndex` map fst bs)
 
-instance Functor Exp  where fmap       = fmapDefault
-instance Foldable Exp where foldMap    = foldMapDefault
-
 instance Applicative Exp where
   pure  = V
   (<*>) = ap
 
-instance Traversable Exp where
-  traverse f (V a)      = V <$> f a
-  traverse f (x :@ y)   = (:@) <$> traverse f x <*> traverse f y
-  traverse f (Lam e)    = Lam <$> traverse f e
-  traverse f (Let bs b) = Let <$> traverse (traverse f) bs <*> traverse f b
-
 instance Monad Exp where
-  return = V
   V a      >>= f = f a
   (x :@ y) >>= f = (x >>= f) :@ (y >>= f)
   Lam e    >>= f = Lam (e >>>= f)
   Let bs b >>= f = Let (map (>>>= f) bs) (b >>>= f)
-
-deriveEq1   ''Exp
-deriveOrd1  ''Exp
-deriveRead1 ''Exp
-deriveShow1 ''Exp
-
-instance Eq a => Eq (Exp a) where (==) = eq1
-instance Ord a => Ord (Exp a) where compare = compare1
-instance Show a => Show (Exp a) where showsPrec = showsPrec1
-instance Read a => Read (Exp a) where readsPrec = readsPrec1
 
 -- | Compute the normal form of an expression
 nf :: Exp a -> Exp a
@@ -144,18 +134,19 @@ cooked = fromJust $ closed $ let_
 -- TODO: use a real pretty printer
 
 prettyPrec :: [String] -> Bool -> Int -> Exp String -> ShowS
-prettyPrec _      d n (V a)      = showString a
-prettyPrec vs     d n (x :@ y)   = showParen d $ 
+prettyPrec _      _ _ (V a)      = showString a
+prettyPrec vs     d n (x :@ y)   = showParen d $
   prettyPrec vs False n x . showChar ' ' . prettyPrec vs True n y
-prettyPrec (v:vs) d n (Lam b)    = showParen d $ 
+prettyPrec []     _ _ Lam{}      = error "Empty variable stream!"
+prettyPrec (v:vs) d n (Lam b)    = showParen d $
   showString v . showString ". " . prettyPrec vs False n (instantiate1 (V v) b)
-prettyPrec vs     d n (Let bs b) = showParen d $ 
+prettyPrec vs     d n (Let bs b) = showParen d $
   showString "let" .  foldr (.) id (zipWith showBinding xs bs) .
   showString " in " . indent . prettyPrec ys False n (inst b)
   where (xs,ys) = splitAt (length bs) vs
-        inst = instantiate (\n -> V (xs !! n))
+        inst = instantiate (\n' -> V (xs !! n'))
         indent = showString ('\n' : replicate (n + 4) ' ')
-        showBinding x b = indent . showString x . showString " = " . prettyPrec ys False (n + 4) (inst b)
+        showBinding x b' = indent . showString x . showString " = " . prettyPrec ys False (n + 4) (inst b')
 
 prettyWith :: [String] -> Exp String -> String
 prettyWith vs t = prettyPrec (filter (`notElem` toList t) vs) False 0 t ""

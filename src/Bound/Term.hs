@@ -15,10 +15,6 @@ module Bound.Term
   , closed
   ) where
 
-import Data.Foldable
-import Data.Traversable
-import Prelude hiding (all)
-
 -- | @'substitute' a p w@ replaces the free variable @a@ with @p@ in @w@.
 --
 -- >>> substitute "hello" ["goodnight","Gracie"] ["hello","!!!"]

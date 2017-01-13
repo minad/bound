@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP             #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE PatternGuards   #-}
 
@@ -17,20 +16,14 @@
 
 module Bound.TH
   (
-#ifdef MIN_VERSION_template_haskell
     makeBound
-#endif
   ) where
 
-#ifdef MIN_VERSION_template_haskell
 import Data.List        (intercalate, foldr1)
 import Data.Traversable (for)
 import Control.Monad    (foldM, mzero, guard)
 import Bound.Class      (Bound((>>>=)))
 import Language.Haskell.TH
-#if __GLASGOW_HASKELL__ < 710
-import Control.Applicative (Applicative, pure, (<*>))
-#endif
 
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Maybe (MaybeT (..))
@@ -126,61 +119,6 @@ makeBound name = do
       bind :: ExpQ
       bind = constructBind name
 
-#if __GLASGOW_HASKELL__ < 708
-      def :: Name -> DecQ -> [DecQ]
-#if __GLASGOW_HASKELL__ < 706
-      def _theName dec = [dec]
-#else
-      def theName  dec = [pragInlD theName Inline FunLike AllPhases, dec]
-#endif
-
-      pureBody :: Name -> [DecQ]
-      pureBody pure'or'return =
-        def pure'or'return
-          (valD (varP pure'or'return) (normalB var) [])
-
-      bindBody :: [DecQ]
-      bindBody =
-        def '(>>=)
-          (valD (varP '(>>=)) (normalB bind) [])
-
-  apBody <- do
-    ff <- newName "ff"
-    fy <- newName "fy"
-    f  <- newName "f"
-    y  <- newName "y"
-
-    -- \ff fy -> do
-    --   f <- ff
-    --   y <- fy
-    --   pure (f x)
-    let ap :: ExpQ
-        ap = lamE [varP ff, varP fy] (doE
-              [bindS   (varP f) (varE ff),
-               bindS   (varP y) (varE fy),
-               noBindS (varE 'pure `appE` (varE f `appE` varE y))])
-
-    pure (def '(<*>) (valD (varP '(<*>)) (normalB ap) []))
-
-  -- instance Applicative $name where
-  --   pure   = $var
-  --   (<*>)  = \ff fy -> do
-  --     f <- ff
-  --     y <- fy
-  --     pure (f y)
-  applicative <-
-    instanceD (cxt []) (appT (conT ''Applicative) (conT name))
-      (pureBody 'pure ++ apBody)
-
-  -- instance Monad $name where
-  --   return = $var
-  --   (>>=)  = $bind
-  monad <-
-    instanceD (cxt []) (appT (conT ''Monad) (conT name))
-      (pureBody 'return ++ bindBody)
-
-  pure [applicative, monad]
-#else
   [d| instance Applicative $(conT name) where
         pure = $var
         {-# INLINE pure #-}
@@ -192,15 +130,9 @@ makeBound name = do
         {-# INLINE (<*>) #-}
 
       instance Monad $(conT name) where
-# if __GLASGOW_HASKELL__ < 710
-        return = $var
-        {-# INLINE return #-}
-# endif
-
         (>>=)  = $bind
         {-# INLINE (>>=) #-}
     |]
-#endif
 
 -- Internals
 data Prop
@@ -222,21 +154,17 @@ constructBind name = do
   interpret =<< construct dec
 
 construct :: Dec -> Q [Components]
-#if MIN_VERSION_template_haskell(2,11,0)
 construct (DataD _ name tyvar _ constructors _) = do
-#else
-construct (DataD _ name tyvar constructors _) = do
-#endif
   var <- getPure name
-  for constructors $ \con -> do
+  for constructors $ \con ->
     case con of
       NormalC conName [(_, _)]
         | conName == var
         -> pure (Variable conName)
       NormalC conName types
-        -> Component conName `fmap` mapM typeToBnd [ ty | (_, ty) <- types ]
+        -> Component conName `fmap` traverse typeToBnd [ ty | (_, ty) <- types ]
       RecC conName types
-        -> Component conName `fmap` mapM typeToBnd [ ty | (_, _, ty) <- types ]
+        -> Component conName `fmap` traverse typeToBnd [ ty | (_, _, ty) <- types ]
       InfixC (_, a) conName (_, b)
         -> do
         bndA <- typeToBnd a
@@ -272,7 +200,7 @@ construct (DataD _ name tyvar constructors _) = do
   isBound :: Type -> Q Bool
   isBound ty
     | Just a <- stripLast2 ty = isInstance ''Bound [a]
-    | otherwise               = return False
+    | otherwise               = pure False
 
   isFunctorApp :: Type -> Q (Maybe Int)
   isFunctorApp = runMaybeT . go
@@ -340,11 +268,7 @@ getName (KindedTV name _) = name
 -- Returns candidate
 getPure :: Name -> Q Name
 getPure name = do
-#if MIN_VERSION_template_haskell(2,11,0)
   TyConI (DataD _ _ tyvr _ cons _) <- reify name
-#else
-  TyConI (DataD _ _ tyvr cons _) <- reify name
-#endif
 
   let
     findReturn :: Type -> [(Name, [Type])] -> Name
@@ -373,10 +297,6 @@ getPure name = do
         (conName, [ t1, t2 ])
       ForallC _ _ conName ->
          allTypeArgs conName
-#if MIN_VERSION_template_haskell(0,2,11)
       _ -> error "Not implemented"
-#endif
 
-  return (findReturn lastTyVar (allTypeArgs `fmap` cons))
-#else
-#endif
+  pure (findReturn lastTyVar (allTypeArgs `fmap` cons))

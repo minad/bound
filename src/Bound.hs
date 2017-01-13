@@ -1,5 +1,3 @@
-{-# LANGUAGE CPP             #-}
-
 -----------------------------------------------------------------------------
 -- |
 -- Copyright   :  (C) 2012 Edward Kmett
@@ -26,7 +24,7 @@
 -- import Data.Foldable
 -- import Data.Traversable
 -- -- This is from deriving-compat package
--- import Data.Deriving (deriveEq1, deriveOrd1, deriveRead1, deriveShow1) 
+-- import Data.Deriving (deriveEq1, deriveOrd1, deriveRead1, deriveShow1)
 -- @
 --
 -- @
@@ -93,7 +91,7 @@
 --
 -- There are longer examples in the @examples/@ folder:
 --
--- <https://github.com/ekmett/bound/tree/master/examples>
+-- <https://github.com/minad/bound/tree/master/examples>
 --
 -- (1) /Simple.hs/ provides an untyped lambda calculus with recursive let
 --   bindings and includes an evaluator for the untyped lambda calculus and a
@@ -128,7 +126,7 @@ module Bound
   , Var(..)
   , fromScope
   , toScope
-  -- * Deriving instances 
+  -- * Deriving instances
   , makeBound
   ) where
 
@@ -136,6 +134,4 @@ import Bound.Var
 import Bound.Class
 import Bound.Scope
 import Bound.Term
-#ifdef MIN_VERSION_template_haskell
 import Bound.TH
-#endif

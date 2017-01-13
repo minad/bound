@@ -1,13 +1,15 @@
-{-# LANGUAGE CPP, DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE StandaloneDeriving #-}
 module Deriving where
 
 import Data.List
-import Data.Foldable
-import Data.Traversable
 import Control.Monad
-import Control.Applicative
 import Data.Functor.Classes
 import Bound
+import Data.Deriving
 
 infixl 9 :@
 
@@ -17,32 +19,10 @@ data Exp a
   | Lam {-# UNPACK #-} !Int (Pat Exp a) (Scope Int Exp a)
   | Let {-# UNPACK #-} !Int [Scope Int Exp a] (Scope Int Exp a)
   | Case (Exp a) [Alt Exp a]
-  deriving (Eq,Functor,Foldable,Traversable)
+  deriving (Functor,Foldable,Traversable)
 
-instance Applicative Exp where
-  pure = V
-  (<*>) = ap
-
-instance Monad Exp where
-  return = V
-  V a        >>= f = f a
-  (x :@ y)   >>= f = (x >>= f) :@ (y >>= f)
-  Lam n p e  >>= f = Lam n (p >>>= f) (e >>>= f)
-  Let n bs e >>= f = Let n (map (>>>= f) bs) (e >>>= f)
-  Case e as  >>= f = Case (e >>= f) (map (>>>= f) as)
-
-#if MIN_VERSION_transformers(0,5,0) || !MIN_VERSION_transformers(0,4,0)
-instance Eq1   Exp where
-  liftEq eq (V a)        (V b)           = eq a b
-  liftEq eq (a :@ a')    (b :@ b')       = liftEq eq a b && liftEq eq a' b'
-  liftEq eq (Lam n p e)  (Lam n' p' e')  = n == n' && liftEq eq p p' && liftEq eq e e'
-  liftEq eq (Let n bs e) (Let n' bs' e') = n == n' && liftEq (liftEq eq) bs bs' && liftEq eq e e'
-  liftEq eq (Case e as)  (Case e' as')   = liftEq eq e e' && liftEq (liftEq eq) as as'
-  liftEq _  _            _               = False
-#else
-instance Eq1   Exp
-#endif
--- And "similarly" for Ord1, Show1 and Read1
+data Alt f a = Alt {-# UNPACK #-} !Int (Pat f a) (Scope Int f a)
+  deriving (Eq,Show,Functor,Foldable,Traversable)
 
 data Pat f a
   = VarP
@@ -52,15 +32,16 @@ data Pat f a
   | ViewP (Scope Int f a) (Pat f a)
   deriving (Eq,Ord,Show,Read,Functor,Foldable,Traversable)
 
-#if MIN_VERSION_transformers(0,5,0) || !MIN_VERSION_transformers(0,4,0)
-instance (Eq1 f, Monad f) => Eq1 (Pat f) where
-  liftEq _  VarP        VarP          = True
-  liftEq _  WildP       WildP         = True
-  liftEq eq (AsP p)     (AsP p')      = liftEq eq p p'
-  liftEq eq (ConP g ps) (ConP g' ps') = g == g' && liftEq (liftEq eq) ps ps'
-  liftEq eq (ViewP e p) (ViewP e' p') = liftEq eq e e' && liftEq eq p p'
-  liftEq _ _ _ = False
-#endif
+instance Applicative Exp where
+  pure = V
+  (<*>) = ap
+
+instance Monad Exp where
+  V a        >>= f = f a
+  (x :@ y)   >>= f = (x >>= f) :@ (y >>= f)
+  Lam n p e  >>= f = Lam n (p >>>= f) (e >>>= f)
+  Let n bs e >>= f = Let n (map (>>>= f) bs) (e >>>= f)
+  Case e as  >>= f = Case (e >>= f) (map (>>>= f) as)
 
 instance Bound Pat where
   VarP      >>>= _ = VarP
@@ -69,14 +50,19 @@ instance Bound Pat where
   ConP g ps >>>= f = ConP g (map (>>>= f) ps)
   ViewP e p >>>= f = ViewP (e >>>= f) (p >>>= f)
 
-data Alt f a = Alt {-# UNPACK #-} !Int (Pat f a) (Scope Int f a)
-  deriving (Eq,Functor,Foldable,Traversable)
+deriveShow1 ''Exp
+deriveShow1 ''Pat
+deriveShow1 ''Alt
+deriveEq1   ''Exp
 
-#if MIN_VERSION_transformers(0,5,0) || !MIN_VERSION_transformers(0,4,0)
+instance (Eq1 f, Monad f) => Eq1 (Pat f) where
+  liftEq = $(makeLiftEq ''Pat)
+
 instance (Eq1 f, Monad f) => Eq1 (Alt f) where
-  liftEq eq (Alt n p b) (Alt n' p' b') =
-    n == n' && liftEq eq p p' && liftEq eq b b'
-#endif
+  liftEq = $(makeLiftEq ''Alt)
+
+deriving instance Eq a => Eq (Exp a)
+deriving instance Show a => Show (Exp a)
 
 instance Bound Alt where
   Alt n p b >>>= f = Alt n (p >>>= f) (b >>>= f)
@@ -103,7 +89,7 @@ asp a (P p as) = P (\bs -> AsP (p (a:bs))) (a:as)
 conp :: String -> [P a] -> P a
 conp g ps = P (ConP g . go ps) (ps >>= bindings)
   where
-    go (P p as:ps) bs = p bs : go ps (bs ++ as)
+    go (P p as:ps') bs = p bs : go ps' (bs ++ as)
     go [] _ = []
 
 -- | view patterns can view variables that are bound earlier than them in the pattern
@@ -137,4 +123,4 @@ alt :: Eq a => P a -> Exp a -> Alt Exp a
 alt (P p as) t = Alt (length as) (p []) (abstract (`elemIndex` as) t)
 
 main :: IO ()
-main = return ()
+main = pure ()

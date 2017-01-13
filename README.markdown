@@ -1,7 +1,7 @@
 Bound
 =====
 
-[![Hackage](https://img.shields.io/hackage/v/bound.svg)](https://hackage.haskell.org/package/bound) [![Build Status](https://secure.travis-ci.org/ekmett/bound.png?branch=master)](http://travis-ci.org/ekmett/bound)
+[![Hackage](https://img.shields.io/hackage/v/bound.svg)](https://hackage.haskell.org/package/bound) [![Build Status](https://secure.travis-ci.org/minad/bound.png?branch=master)](http://travis-ci.org/minad/bound)
 
 Goals
 -----
@@ -58,7 +58,7 @@ main = do
   print $ whnf term  -- V 'y'
 ```
 
-   There are longer examples in the [examples/ folder](https://github.com/ekmett/bound/tree/master/examples).
+   There are longer examples in the [examples/ folder](https://github.com/minad/bound/tree/master/examples).
 
 Contact Information
 -------------------

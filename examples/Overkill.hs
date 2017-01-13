@@ -1,38 +1,23 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE TypeOperators #-}
 
-{-# OPTIONS_GHC -fwarn-incomplete-patterns -fno-warn-orphans #-}
-
 module Overkill where
-
--- Dara.Functor.Classes in transformers 0.4.0 are totally different
-#if MIN_VERSION_transformers(0,5,0) || !MIN_VERSION_transformers(0,4,0)
 
 import Data.Vector as Vector hiding ((++), map)
 import Data.List as List
-import Data.Foldable
 import Data.Traversable
 import Data.Monoid (Monoid(..))
 import Control.Monad
 import Control.Applicative
-import Prelude hiding (foldr)
 import Data.Functor.Classes
 import Data.Type.Equality
 import Bound
 
 infixl 9 :@
 infixr 5 :>
-
--- little orphan instances
-instance Show1 Vector where
-    liftShowsPrec _ sl _ v = sl (Vector.toList v)
-
-instance Eq1 Vector where
-    liftEq eq v u = Vector.and (Vector.zipWith eq v u)
 
 data Exp a
   = Var a
@@ -80,7 +65,6 @@ instance Traversable Exp where
   traverse f (Let bs e) = Let <$> traverse (traverse f) bs <*> traverse f e
 
 instance Monad Exp where
-  return         = Var
   Var a    >>= f = f a
   (x :@ y) >>= f = (x >>= f) :@ (y >>= f)
   Lam p e  >>= f = Lam (p >>>= f) (e >>>= f)
@@ -340,13 +324,13 @@ instance Show (Path i) where
 
 -- |
 -- >>> let_ [("x",Var "y"),("y",Var "x" :@ Var "y")] $ lam (varp "z") (Var "z" :@ Var "y")
--- Let (fromList [Scope (Var (B 1)),Scope (Var (B 0) :@ Var (B 1))]) (Scope (Lam VarP (Scope (Var (B V) :@ Var (F (Var (B 1)))))))
+-- Let [Scope (Var (B 1)),Scope (Var (B 0) :@ Var (B 1))] (Scope (Lam VarP (Scope (Var (B V) :@ Var (F (Var (B 1)))))))
 --
 -- >>> lam (varp "x") (Var "x")
 -- Lam VarP (Scope (Var (B V)))
 --
 -- >>> lam (conp "Hello" [varp "x", wildp]) (Var "y")
 -- Lam (ConP "Hello" (VarP :> WildP :> NilP)) (Scope (Var (F (Var "y"))))
-#endif
+
 main :: IO ()
-main = return ()
+main = pure ()

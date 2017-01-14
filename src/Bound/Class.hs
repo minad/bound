@@ -1,4 +1,6 @@
 {-# LANGUAGE DefaultSignatures #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FunctionalDependencies #-}
 -----------------------------------------------------------------------------
 -- |
 -- Copyright   :  (C) 2012-2015 Edward Kmett
@@ -13,6 +15,7 @@
 ----------------------------------------------------------------------------
 module Bound.Class
   ( Bound(..)
+  , BoundBy(..)
   , (=<<<)
   ) where
 
@@ -61,6 +64,10 @@ class Bound t where
   default (>>>=) :: (MonadTrans t, Monad f, Monad (t f)) => t f a -> (a -> f c) -> t f c
   m >>>= f = m >>= lift . f
   {-# INLINE (>>>=) #-}
+
+-- | Generalizes 'Bound' to permit binding by another type without taking it as a parameter.
+class Monad m => BoundBy tm m | tm -> m where
+  boundBy :: (a -> m b) -> tm a -> tm b
 
 instance Bound (ContT c) where
   m >>>= f = m >>= lift . f

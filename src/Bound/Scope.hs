@@ -6,6 +6,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 -----------------------------------------------------------------------------
 -- |
@@ -46,6 +48,10 @@ module Bound.Scope
   , bitransverseScope
   , transverseScope
   , instantiateVars
+  , mergeScope
+  , splitScope
+  , inScope
+  , rebind
   ) where
 
 import Bound.Class
@@ -140,6 +146,10 @@ instance (Monad f, Ord b, Ord1 f) => Ord1 (Scope b f) where
 instance Bound (Scope b) where
   Scope m >>>= f = Scope (fmap (fmap (>>= f)) m)
   {-# INLINE (>>>=) #-}
+
+instance Monad m => BoundBy (Scope b m) m where
+  boundBy = flip (>>>=)
+  {-# INLINE boundBy #-}
 
 instance (Hashable b, Monad f, Hashable1 f) => Hashable1 (Scope b f) where
   liftHashWithSalt h s m = liftHashWithSalt (liftHashWithSalt h) s (fromScope m)
@@ -324,6 +334,28 @@ instantiateVars as = instantiate (vs !!) where
 hoistScope :: Functor f => (forall x. f x -> g x) -> Scope b f a -> Scope b g a
 hoistScope t (Scope b) = Scope $ t (fmap t <$> b)
 {-# INLINE hoistScope #-}
+
+mergeScope :: Monad c => Scope b1 (Scope b2 c) a -> Scope (Var b1 b2) c a
+mergeScope = toScope . fmap go . fromScope . fromScope
+  where go (B b2)     = B (F b2)
+        go (F (B b1)) = B (B b1)
+        go (F (F a))  = F a
+
+splitScope :: Monad c => Scope (Var b1 b2) c a -> Scope b1 (Scope b2 c) a
+splitScope = Scope . lift . fmap go . unscope
+ where go (B (B b1)) = B b1
+       go (B (F b2)) = F . Scope . pure . B $ b2
+       go (F a)      = F $ lift a
+
+-- | Enables a partial rebinding and instantiation of the bound variables in a
+-- 'Scope'.
+rebind :: Functor f => (b -> Var b' (f a)) -> Scope b f a -> Scope b' f a
+rebind f = Scope . fmap (unvar f F) . unscope
+
+-- | Helper function for when you wish to run an action on a smashed version of
+-- a scope. Transforms traversals for generality.
+inScope :: (Functor f, Monad t) => (t (Var b a) -> f (t (Var b a))) -> Scope b t a -> f (Scope b t a)
+inScope f = fmap toScope . f . fromScope
 
 instance (Binary b, Binary (f (Var b (f a))), Binary a) => Binary (Scope b f a)
 instance (NFData b, NFData (f (Var b (f a))), NFData a) => NFData (Scope b f a)

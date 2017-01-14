@@ -6,6 +6,8 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 -----------------------------------------------------------------------------
 -- |
@@ -45,6 +47,8 @@ module Bound.Scope.Simple
   , bitransverseScope
   , transverseScope
   , instantiateVars
+  , inScope
+  , rebind
   ) where
 
 import Bound.Class
@@ -138,6 +142,10 @@ instance Bound (Scope b) where
     B b -> pure (B b)
     F a -> fmap F (f a)
   {-# INLINE (>>>=) #-}
+
+instance Monad m => BoundBy (Scope b m) m where
+  boundBy = flip (>>>=)
+  {-# INLINE boundBy #-}
 
 instance (Hashable b, Hashable1 f) => Hashable1 (Scope b f) where
   liftHashWithSalt h n m = liftHashWithSalt (liftHashWithSalt h) n (unscope m)
@@ -311,6 +319,16 @@ bitransverseScope :: Applicative f => (forall a a'. (a -> f a') ->         t a -
                                    ->  forall a a'. (a -> f a') -> Scope b t a -> f (Scope b u a')
 bitransverseScope tau f (Scope s) = Scope <$> tau (traverse f) s
 {-# INLINE bitransverseScope #-}
+
+-- | Enables a partial rebinding and instantiation of the bound variables in a
+-- 'Scope'.
+rebind :: Functor f => (b -> Var b' a) -> Scope b f a -> Scope b' f a
+rebind f = Scope . fmap (unvar f F) . unscope
+
+-- | Helper function for when you wish to run an action on a smashed version of
+-- a scope. Transforms traversals for generality.
+inScope :: Functor f => (t (Var b a) -> f (t (Var b a))) -> Scope b t a -> f (Scope b t a)
+inScope f = fmap toScope . f . fromScope
 
 instance (Binary b, Binary a, Binary (f (Var b a))) => Binary (Scope b f a)
 instance (NFData b, NFData a, NFData (f (Var b a))) => NFData (Scope b f a)

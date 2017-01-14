@@ -120,6 +120,7 @@ module Bound
   -- ** Instantiation of bound variables
   , instantiate, instantiate1
   -- * Structures permitting substitution
+  , BoundBy(..)
   , Bound(..)
   , (=<<<)
   -- * Conversion to Traditional de Bruijn
